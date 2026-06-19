@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Go Rate Limiter — Concepts Guide</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f1117;
+    --bg2: #161b27;
+    --bg3: #1e2535;
+    --bg4: #252d40;
+    --border: #2a3347;
+    --border2: #3a4560;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #64748b;
+    --blue: #60a5fa;
+    --blue-bg: #1e3a5f;
+    --blue-dim: #1a2d4a;
+    --green: #4ade80;
+    --green-bg: #14532d;
+    --green-dim: #0f3d22;
+    --amber: #fbbf24;
+    --amber-bg: #451a03;
+    --amber-dim: #362005;
+    --red: #f87171;
+    --red-bg: #450a0a;
+    --red-dim: #3a0a0a;
+    --purple: #a78bfa;
+    --purple-bg: #2e1065;
+    --purple-dim: #1e0b40;
+    --cyan: #22d3ee;
+    --cyan-bg: #083344;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Inter', system-ui, sans-serif;
+    --radius: 8px;
+    --radius-lg: 12px;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── LAYOUT ── */
+  .shell { display: flex; min-height: 100vh; }
+
+  .sidebar {
+    width: 240px;
+    flex-shrink: 0;
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    overflow-y: auto;
+    padding: 0 0 2rem;
+    z-index: 100;
+  }
+
+  .sidebar-logo {
+    padding: 1.25rem 1.25rem 1rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0.5rem;
+  }
+  .sidebar-logo .logo-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--green);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 4px;
+  }
+  .sidebar-logo h1 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.3;
+  }
+
+  .sidebar-section {
+    padding: 0.5rem 0.75rem 0.25rem 1rem;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text3);
+    margin-top: 0.5rem;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 1rem;
+    font-size: 13px;
+    color: var(--text2);
+    cursor: pointer;
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+    text-decoration: none;
+  }
+  .nav-item:hover { color: var(--text); background: var(--bg3); }
+  .nav-item.active {
+    color: var(--blue);
+    border-left-color: var(--blue);
+    background: var(--blue-dim);
+    font-weight: 500;
+  }
+  .nav-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.5;
+    flex-shrink: 0;
+  }
+  .nav-item.active .nav-dot { opacity: 1; }
+
+  .main {
+    margin-left: 240px;
+    flex: 1;
+    max-width: 900px;
+    padding: 2.5rem 2.5rem 4rem;
+  }
+
+  /* ── SECTIONS ── */
+  .section { display: none; }
+  .section.active { display: block; }
+
+  .section-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-header .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--cyan);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .section-header h2 {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.25;
+    margin-bottom: 6px;
+  }
+  .section-header p {
+    font-size: 14px;
+    color: var(--text2);
+  }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.25rem;
+  }
+  .card h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card p {
+    font-size: 14px;
+    color: var(--text2);
+    line-height: 1.7;
+    margin-bottom: 0.6rem;
+  }
+  .card p:last-child { margin-bottom: 0; }
+
+  /* ── CODE BLOCKS ── */
+  pre {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.1rem 1.25rem;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.7;
+    overflow-x: auto;
+    margin: 0.85rem 0;
+    position: relative;
+  }
+  pre:last-child { margin-bottom: 0; }
+  .pre-label {
+    position: absolute;
+    top: 8px; right: 10px;
+    font-size: 10px;
+    font-family: var(--mono);
+    color: var(--text3);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  /* syntax highlight */
+  .kw  { color: #c084fc; }
+  .fn  { color: #34d399; }
+  .st  { color: #fbbf24; }
+  .cm  { color: #4b5563; font-style: italic; }
+  .num { color: #60a5fa; }
+  .tp  { color: #fb923c; }
+  .lu  { color: #f472b6; }
+  .good { color: #4ade80; }
+  .bad  { color: #f87171; }
+
+  /* ── CALLOUTS ── */
+  .callout {
+    display: flex;
+    gap: 10px;
+    padding: 0.85rem 1rem;
+    border-radius: var(--radius);
+    margin: 0.85rem 0;
+    font-size: 13px;
+    line-height: 1.6;
+    border-left: 3px solid;
+  }
+  .callout-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .callout.info  { background: var(--blue-dim);   border-color: var(--blue);   color: #93c5fd; }
+  .callout.warn  { background: var(--amber-dim);  border-color: var(--amber);  color: #fde68a; }
+  .callout.danger{ background: var(--red-dim);    border-color: var(--red);    color: #fca5a5; }
+  .callout.success{background: var(--green-dim);  border-color: var(--green);  color: #86efac; }
+  .callout.purple{ background: var(--purple-dim); border-color: var(--purple); color: #c4b5fd; }
+
+  /* ── BADGES ── */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 20px;
+    letter-spacing: 0.03em;
+  }
+  .badge-blue   { background: var(--blue-bg);   color: var(--blue); }
+  .badge-green  { background: var(--green-bg);  color: var(--green); }
+  .badge-amber  { background: var(--amber-bg);  color: var(--amber); }
+  .badge-red    { background: var(--red-bg);    color: var(--red); }
+  .badge-purple { background: var(--purple-bg); color: var(--purple); }
+  .badge-cyan   { background: var(--cyan-bg);   color: var(--cyan); }
+
+  /* ── TABLES ── */
+  .table-wrap { overflow-x: auto; margin: 0.85rem 0; border-radius: var(--radius); border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    padding: 9px 14px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 9px 14px;
+    color: var(--text2);
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    line-height: 1.5;
+  }
+  tr:last-child td { border-bottom: none; }
+  td code, th code {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    background: var(--bg4);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: var(--cyan);
+  }
+
+  /* ── FLOW DIAGRAMS ── */
+  .flow {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0.85rem 0;
+    padding: 1rem 1.25rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .flow-box {
+    font-size: 12px;
+    font-weight: 500;
+    padding: 5px 12px;
+    border-radius: 6px;
+    white-space: nowrap;
+    font-family: var(--mono);
+  }
+  .fb-blue  { background: var(--blue-bg);  color: var(--blue); }
+  .fb-green { background: var(--green-bg); color: var(--green); }
+  .fb-red   { background: var(--red-bg);   color: var(--red); }
+  .fb-amber { background: var(--amber-bg); color: var(--amber); }
+  .fb-gray  { background: var(--bg4);      color: var(--text2); border: 1px solid var(--border); }
+  .flow-arrow { color: var(--text3); font-size: 14px; }
+
+  /* ── TWO COLUMN ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 0.85rem 0; }
+  @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+  .col-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.1rem;
+  }
+  .col-card .col-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.6rem;
+  }
+
+  /* ── COMPARE GRID ── */
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 0.85rem 0; }
+  .compare-item {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .compare-item .compare-header {
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+  }
+  .compare-item .compare-body { padding: 10px 12px; }
+  .compare-item.good .compare-header { background: var(--green-bg); color: var(--green); }
+  .compare-item.bad  .compare-header { background: var(--red-bg);   color: var(--red); }
+  .compare-item .compare-body pre { margin: 0; border: none; background: var(--bg); border-radius: 0; padding: 0.85rem 1rem; }
+
+  /* ── STEP LIST ── */
+  .steps { margin: 0.85rem 0; display: flex; flex-direction: column; gap: 0; }
+  .step {
+    display: flex;
+    gap: 14px;
+    position: relative;
+  }
+  .step-num {
+    flex-shrink: 0;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--blue-bg);
+    color: var(--blue);
+    font-size: 12px;
+    font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 1px;
+    z-index: 1;
+  }
+  .step-line {
+    position: absolute;
+    left: 13px;
+    top: 27px;
+    bottom: -16px;
+    width: 1px;
+    background: var(--border);
+  }
+  .step:last-child .step-line { display: none; }
+  .step-body { padding-bottom: 1.25rem; flex: 1; }
+  .step-body h4 { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .step-body p  { font-size: 13px; color: var(--text2); line-height: 1.6; }
+
+  /* ── INLINE CODE ── */
+  code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--bg4);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: var(--cyan);
+  }
+
+  /* ── DIVIDER ── */
+  .divider { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+
+  /* ── HOMEPAGE ── */
+  .home-hero {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .home-hero::before {
+    content: '';
+    position: absolute;
+    top: -40px; right: -40px;
+    width: 180px; height: 180px;
+    background: radial-gradient(circle, rgba(96,165,250,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .home-hero .hero-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--blue);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .home-hero h2 {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .home-hero p { font-size: 14px; color: var(--text2); max-width: 560px; }
+
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+  .grid-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .grid-card:hover { border-color: var(--border2); background: var(--bg3); }
+  .grid-card .gc-icon { font-size: 20px; margin-bottom: 8px; }
+  .grid-card .gc-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .grid-card .gc-desc { font-size: 12px; color: var(--text3); line-height: 1.5; }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  /* ── MOBILE ── */
+  @media (max-width: 768px) {
+    .sidebar { width: 200px; }
+    .main { margin-left: 200px; padding: 1.5rem 1.25rem 3rem; }
+  }
+  @media (max-width: 600px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; padding: 1rem 1rem 3rem; }
+    .compare-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- SIDEBAR -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <span class="logo-tag">go / concepts</span>
+    <h1>Rate Limiter<br>Field Guide</h1>
+  </div>
+
+  <div class="sidebar-section">Overview</div>
+  <a class="nav-item active" onclick="show('home')">
+    <span class="nav-dot"></span>Home
+  </a>
+
+  <div class="sidebar-section">HTTP Layer</div>
+  <a class="nav-item" onclick="show('http')">
+    <span class="nav-dot"></span>Handler interface
+  </a>
+  <a class="nav-item" onclick="show('middleware')">
+    <span class="nav-dot"></span>Middleware chains
+  </a>
+
+  <div class="sidebar-section">Concurrency</div>
+  <a class="nav-item" onclick="show('mutex')">
+    <span class="nav-dot"></span>sync.Mutex
+  </a>
+
+  <div class="sidebar-section">Redis</div>
+  <a class="nav-item" onclick="show('redis')">
+    <span class="nav-dot"></span>Client &amp; commands
+  </a>
+  <a class="nav-item" onclick="show('lua')">
+    <span class="nav-dot"></span>Lua scripts
+  </a>
+
+  <div class="sidebar-section">Architecture</div>
+  <a class="nav-item" onclick="show('tiers')">
+    <span class="nav-dot"></span>Two-tier design
+  </a>
+</nav>
+
+<!-- MAIN CONTENT -->
+<main class="main">
+
+<!-- ═══════════════════════════════════════════ HOME -->
+<div id="home" class="section active">
+  <div class="home-hero">
+    <div class="hero-tag">// go rate limiter — revision guide</div>
+    <h2>Everything you built, explained.</h2>
+    <p>From the <code>http.Handler</code> interface all the way to Redis Lua scripts and two-tier distributed rate limiting. Built to be read in 20 minutes, referenced forever.</p>
+  </div>
+
+  <div class="card-grid">
+    <div class="grid-card" onclick="show('http')">
+      <div class="gc-icon">🔌</div>
+      <div class="gc-title">HTTP internals</div>
+      <div class="gc-desc">Handler interface, ServeHTTP, HandlerFunc, Handle vs HandleFunc</div>
+    </div>
+    <div class="grid-card" onclick="show('middleware')">
+      <div class="gc-icon">🔗</div>
+      <div class="gc-title">Middleware chains</div>
+      <div class="gc-desc">How wrapping works, chain order, mutex trap, clean isAllowed pattern</div>
+    </div>
+    <div class="grid-card" onclick="show('mutex')">
+      <div class="gc-icon">🔒</div>
+      <div class="gc-title">sync.Mutex</div>
+      <div class="gc-desc">Why maps need locks, mutex vs sync.Map, defer trap, data races</div>
+    </div>
+    <div class="grid-card" onclick="show('redis')">
+      <div class="gc-icon">🔴</div>
+      <div class="gc-title">Redis client</div>
+      <div class="gc-desc">Connection pooling, core commands, context timeouts, fail open/closed</div>
+    </div>
+    <div class="grid-card" onclick="show('lua')">
+      <div class="gc-icon">📜</div>
+      <div class="gc-title">Lua scripts</div>
+      <div class="gc-desc">Atomicity, KEYS vs ARGV, your script dissected, EVALSHA caching</div>
+    </div>
+    <div class="grid-card" onclick="show('tiers')">
+      <div class="gc-icon">🏗️</div>
+      <div class="gc-title">Two-tier design</div>
+      <div class="gc-desc">Local vs Redis, K8s consistency problem, fixed window burst</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>What you built — architecture at a glance</h3>
+    <div class="flow">
+      <div class="flow-box fb-gray">HTTP Request</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box fb-blue">LoggingMiddleware</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box fb-amber">RateLimiter.CheckIfAllowed</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box fb-blue">RedisRateLimiter.CheckRateLimit</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box fb-green">TypicodeHandler</div>
+    </div>
+    <p>Two middleware layers guard the handler. The first enforces a local in-memory limit per IP using a mutex-protected map. The second enforces a global limit via Redis using an atomic Lua script. Together they form a two-tier rate limiter that is fast locally and consistent globally.</p>
+  </div>
+
+  <div class="card">
+    <h3>Bugs you caught and fixed</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Bug</th><th>Root cause</th><th>Fix</th></tr>
+        <tr><td><code>RemoteAddr</code> includes port</td><td><code>"127.0.0.1:54321"</code> — every request is a different key</td><td><code>net.SplitHostPort()</code></td></tr>
+        <tr><td>No time window</td><td>Counter never resets — limit hit once means blocked forever</td><td><code>userRateLimit{count, time}</code> struct + window check</td></tr>
+        <tr><td>Stale <code>userRate</code> read</td><td>After map reset, local variable still holds old count</td><td>Re-read from map: <code>userRate = rl.cache_map[ip]</code></td></tr>
+        <tr><td>Mutex held through <code>next.ServeHTTP</code></td><td><code>defer</code> scoped to outer function — entire handler ran locked</td><td>Manually unlock before calling next, or extract to <code>isAllowed()</code></td></tr>
+        <tr><td>Mutex leak on 429 path</td><td>Early <code>return</code> before manual <code>Unlock()</code></td><td>Unlock before <code>http.Error</code> on the rejection path</td></tr>
+        <tr><td>Plain map — data race</td><td>Multiple goroutines read/write simultaneously</td><td><code>sync.Mutex</code> wrapping all map access</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ HTTP -->
+<div id="http" class="section">
+  <div class="section-header">
+    <div class="eyebrow">// http layer</div>
+    <h2>The Handler interface</h2>
+    <p>Everything in Go's HTTP server builds on a single interface with one method.</p>
+  </div>
+
+  <div class="card">
+    <h3>The contract</h3>
+    <p>Go's http package has one rule: if your type has this method, it can handle HTTP requests. There is no <code>implements</code> keyword — if the method exists with the exact signature, your type satisfies the interface automatically at compile time.</p>
+    <pre><span class="kw">type</span> <span class="tp">Handler</span> <span class="kw">interface</span> {
+    <span class="fn">ServeHTTP</span>(w http.ResponseWriter, r *http.Request)
+}
+<span class="cm">// That's it. The entire http.Handler interface.</span></pre>
+    <div class="callout info">
+      <span class="callout-icon">💡</span>
+      <span>This is called <strong>implicit interface satisfaction</strong>. No declaration needed — the compiler checks the method signature at compile time.</span>
+    </div>
+    <p>Notice that <code>ServeHTTP</code> returns nothing. The response is <em>written</em> into <code>w</code> like a stream — you call <code>w.Write()</code>, <code>w.WriteHeader()</code>, and <code>w.Header().Set()</code> to build the response. The function just ends when you're done.</p>
+  </div>
+
+  <div class="card">
+    <h3>Three ways to create a handler</h3>
+    <div class="two-col">
+      <div class="col-card">
+        <div class="col-label" style="color: var(--blue);">Option A — struct + ServeHTTP</div>
+        <pre style="font-size:11.5px;"><span class="kw">type</span> <span class="tp">MyHandler</span> <span class="kw">struct</span>{
+    service *Service
+}
+
+<span class="kw">func</span> (h *<span class="tp">MyHandler</span>) <span class="fn">ServeHTTP</span>(
+    w http.ResponseWriter,
+    r *http.Request) {
+    w.<span class="fn">Write</span>([]<span class="kw">byte</span>(<span class="st">"hello"</span>))
+}
+
+<span class="cm">// h is an http.Handler — use http.Handle</span>
+http.<span class="fn">Handle</span>(<span class="st">"/path"</span>, &amp;MyHandler{})</pre>
+      </div>
+      <div class="col-card">
+        <div class="col-label" style="color: var(--green);">Option B — plain function</div>
+        <pre style="font-size:11.5px;"><span class="kw">func</span> <span class="fn">myHandler</span>(
+    w http.ResponseWriter,
+    r *http.Request) {
+    w.<span class="fn">Write</span>([]<span class="kw">byte</span>(<span class="st">"hello"</span>))
+}
+
+<span class="cm">// pass the function directly</span>
+<span class="cm">// HandleFunc wraps it internally</span>
+http.<span class="fn">HandleFunc</span>(<span class="st">"/path"</span>, myHandler)</pre>
+      </div>
+    </div>
+    <p style="margin-top:0.75rem"><span class="badge badge-amber">Your pattern — Option C</span> A method on a struct (not named ServeHTTP). Works fine with <code>HandleFunc</code>.</p>
+    <pre><span class="kw">func</span> (ctrl *<span class="tp">WeatherController</span>) <span class="fn">GetWeatherHandler</span>(
+    w http.ResponseWriter, r *http.Request) { ... }
+
+<span class="cm">// ctrl.GetWeatherHandler is a "method value" — same signature as a plain func</span>
+http.<span class="fn">HandleFunc</span>(<span class="st">"/weather"</span>, ctrl.GetWeatherHandler)</pre>
+  </div>
+
+  <div class="card">
+    <h3>http.HandlerFunc — the converter type</h3>
+    <p>A plain function with signature <code>func(w, r)</code> is NOT an <code>http.Handler</code> because it has no <code>ServeHTTP</code> method. <code>http.HandlerFunc</code> wraps it and adds the method. Its only job is conversion.</p>
+    <pre><span class="cm">// From Go's standard library — this is all it is:</span>
+<span class="kw">type</span> <span class="tp">HandlerFunc</span> <span class="kw">func</span>(ResponseWriter, *Request)
+
+<span class="kw">func</span> (f <span class="tp">HandlerFunc</span>) <span class="fn">ServeHTTP</span>(w ResponseWriter, r *Request) {
+    <span class="fn">f</span>(w, r) <span class="cm">// just calls itself</span>
+}
+
+<span class="cm">// Usage: convert a plain func into an http.Handler</span>
+<span class="kw">var</span> h http.Handler = http.<span class="tp">HandlerFunc</span>(myFunc) <span class="cm">// ✓ now satisfies interface</span></pre>
+    <div class="callout purple">
+      <span class="callout-icon">🧩</span>
+      <span>You'll use <code>http.HandlerFunc</code> constantly inside middleware — it's how you return a new <code>http.Handler</code> from an anonymous function without defining a struct.</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Handle vs HandleFunc — when to use which</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Function</th><th>Accepts</th><th>Used when</th></tr>
+        <tr>
+          <td><code>http.Handle</code></td>
+          <td><code>http.Handler</code> interface</td>
+          <td>Struct already has <code>ServeHTTP</code>, or you've wrapped with <code>HandlerFunc</code></td>
+        </tr>
+        <tr>
+          <td><code>http.HandleFunc</code></td>
+          <td><code>func(w, r)</code></td>
+          <td>Plain functions or method values like <code>ctrl.GetWeather</code></td>
+        </tr>
+      </table>
+    </div>
+    <p>Internally, <code>http.HandleFunc</code> just calls <code>http.Handle(path, HandlerFunc(fn))</code> — the conversion happens automatically.</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ MIDDLEWARE -->
+<div id="middleware" class="section">
+  <div class="section-header">
+    <div class="eyebrow">// http layer</div>
+    <h2>Middleware chains</h2>
+    <p>Functions that wrap handlers — running code before and after your actual logic.</p>
+  </div>
+
+  <div class="card">
+    <h3>What middleware is — one sentence</h3>
+    <p>A function that takes an <code>http.Handler</code>, does something, and returns a new <code>http.Handler</code>.</p>
+    <pre><span class="kw">func</span> <span class="fn">SomeMiddleware</span>(next http.Handler) http.Handler {
+    <span class="kw">return</span> http.<span class="fn">HandlerFunc</span>(<span class="kw">func</span>(w http.ResponseWriter, r *http.Request) {
+
+        <span class="cm">// ① runs on the way IN (before your handler)</span>
+
+        next.<span class="fn">ServeHTTP</span>(w, r) <span class="cm">// ② passes control inward</span>
+
+        <span class="cm">// ③ runs on the way OUT (after handler returns)</span>
+    })
+}</pre>
+    <div class="callout info">
+      <span class="callout-icon">💡</span>
+      <span><code>next.ServeHTTP(w, r)</code> is just a method call on a variable. No magic. <code>next</code> holds a reference to whatever handler is "inside" this one.</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>How the chain connects — Russian dolls</h3>
+    <div class="flow">
+      <div class="flow-box fb-gray">Request</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box fb-blue">Logging MW</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box fb-amber">RateLimit MW</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box fb-green">Handler</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box fb-gray">Response</div>
+    </div>
+    <p>You build this chain once at startup, wrapping inside → out:</p>
+    <pre>weatherHandler := &amp;<span class="tp">WeatherHandler</span>{}
+
+rateLimited := <span class="fn">RateLimitMiddleware</span>(weatherHandler)  <span class="cm">// next = weatherHandler</span>
+logged      := <span class="fn">LoggingMiddleware</span>(rateLimited)         <span class="cm">// next = rateLimited</span>
+
+http.<span class="fn">Handle</span>(<span class="st">"/weather"</span>, logged)
+<span class="cm">// logged → rateLimited → weatherHandler</span>
+<span class="cm">// each "next" variable holds a reference to the inner handler</span></pre>
+  </div>
+
+  <div class="card">
+    <h3>Three middleware patterns</h3>
+    <div class="two-col">
+      <div class="col-card">
+        <div class="col-label" style="color:var(--blue);">Pre-process + short-circuit</div>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:8px;">Rate limiter — check, block or pass</p>
+        <pre style="font-size:11.5px;"><span class="kw">if</span> overLimit {
+    http.<span class="fn">Error</span>(w, <span class="st">"429"</span>, <span class="num">429</span>)
+    <span class="kw">return</span> <span class="cm">// never calls next</span>
+}
+next.<span class="fn">ServeHTTP</span>(w, r)</pre>
+      </div>
+      <div class="col-card">
+        <div class="col-label" style="color:var(--green);">Pre + post processing</div>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:8px;">Logger — measure request duration</p>
+        <pre style="font-size:11.5px;">start := time.<span class="fn">Now</span>()
+next.<span class="fn">ServeHTTP</span>(w, r)
+<span class="cm">// after handler returns:</span>
+log.<span class="fn">Println</span>(time.<span class="fn">Since</span>(start))</pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>The mutex-across-next trap</h3>
+    <div class="compare-grid">
+      <div class="compare-item bad">
+        <div class="compare-header">❌ Wrong — server becomes single-threaded</div>
+        <div class="compare-body">
+          <pre style="font-size:11.5px;">rl.mutex.<span class="fn">Lock</span>()
+<span class="kw">defer</span> rl.mutex.<span class="fn">Unlock</span>()
+<span class="cm">// defer runs when func returns</span>
+<span class="cm">// = lock held through ALL of this:</span>
+next.<span class="fn">ServeHTTP</span>(w, r) <span class="bad">← every downstream call</span>
+<span class="cm">// DB queries, Redis, everything</span>
+<span class="cm">// All other requests BLOCKED</span></pre>
+        </div>
+      </div>
+      <div class="compare-item good">
+        <div class="compare-header">✓ Right — lock released before next</div>
+        <div class="compare-body">
+          <pre style="font-size:11.5px;"><span class="kw">func</span> (rl *<span class="tp">RateLimiter</span>) <span class="fn">isAllowed</span>(ip <span class="kw">string</span>) <span class="kw">bool</span> {
+    rl.mutex.<span class="fn">Lock</span>()
+    <span class="kw">defer</span> rl.mutex.<span class="fn">Unlock</span>() <span class="good">← scoped to THIS func</span>
+    <span class="cm">// map work here</span>
+    <span class="kw">return</span> allowed
+}
+<span class="cm">// then in middleware:</span>
+<span class="kw">if</span> !rl.<span class="fn">isAllowed</span>(ip) { ... }
+next.<span class="fn">ServeHTTP</span>(w, r) <span class="good">← no lock held ✓</span></pre>
+        </div>
+      </div>
+    </div>
+    <div class="callout warn">
+      <span class="callout-icon">⚠️</span>
+      <span>Extracting map logic into a helper function is the clean fix. <code>defer</code> inside the helper unlocks when <em>it</em> returns, not when the middleware function returns.</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ MUTEX -->
+<div id="mutex" class="section">
+  <div class="section-header">
+    <div class="eyebrow">// concurrency</div>
+    <h2>sync.Mutex</h2>
+    <p>How to share state safely across goroutines — and why you must.</p>
+  </div>
+
+  <div class="card">
+    <h3>Why maps crash without a mutex</h3>
+    <p>Your HTTP server creates a new goroutine for every single request. If two goroutines read and write the same map simultaneously, Go's runtime detects this and panics:</p>
+    <div class="callout danger">
+      <span class="callout-icon">💥</span>
+      <span><code>fatal error: concurrent map read and map write</code> — this is not just a bug, it's a runtime crash. Run with <code>go run -race</code> to catch it before production.</span>
+    </div>
+    <pre><span class="cm">// Two goroutines, same moment, same map:</span>
+<span class="cm">// goroutine 1: count := rl.cache_map["1.2.3.4"]  ← READ</span>
+<span class="cm">// goroutine 2: rl.cache_map["1.2.3.4"] = entry   ← WRITE</span>
+<span class="cm">// Result: CRASH</span>
+
+<span class="cm">// With mutex — only one goroutine at a time:</span>
+rl.mutex.<span class="fn">Lock</span>()             <span class="cm">// all others wait here</span>
+count := rl.cache_map[ip]   <span class="cm">// safe read</span>
+rl.cache_map[ip] = newEntry <span class="cm">// safe write</span>
+rl.mutex.<span class="fn">Unlock</span>()           <span class="cm">// next goroutine can enter</span></pre>
+  </div>
+
+  <div class="card">
+    <h3>sync.Mutex — no initialization needed</h3>
+    <pre><span class="kw">type</span> <span class="tp">RateLimiter</span> <span class="kw">struct</span> {
+    mutex     sync.Mutex            <span class="cm">// zero value = unlocked — just declare it</span>
+    limit     <span class="kw">int</span>
+    cache_map <span class="kw">map</span>[<span class="kw">string</span>]userRateLimit
+}
+
+<span class="cm">// No sync.NewMutex() needed — unlike channels or maps</span>
+<span class="cm">// sync.Mutex{} is ready to use immediately</span></pre>
+    <div class="callout info">
+      <span class="callout-icon">💡</span>
+      <span>A <code>sync.Mutex</code> must never be copied after first use. Pass your struct by pointer (<code>*RateLimiter</code>) not by value — otherwise each copy gets its own lock and protects nothing.</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>sync.Mutex vs sync.Map — chose correctly</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th></th><th>sync.Mutex + map</th><th>sync.Map</th></tr>
+        <tr>
+          <td>Optimized for</td>
+          <td>High write contention — same keys written constantly</td>
+          <td>Write-once read-many, or keys accessed by disjoint goroutines</td>
+        </tr>
+        <tr>
+          <td>Rate limiter fit</td>
+          <td><span class="badge badge-green">✓ Correct</span> — every request reads AND writes the same hot keys</td>
+          <td><span class="badge badge-red">✗ Wrong</span> — optimized for the opposite access pattern</td>
+        </tr>
+        <tr>
+          <td>Internal mechanism</td>
+          <td>Simple lock — predictable, low overhead</td>
+          <td>Copy-on-write — adds overhead under write contention</td>
+        </tr>
+        <tr>
+          <td>Verdict</td>
+          <td>For a rate limiter: faster AND simpler</td>
+          <td>Would be slower here, not faster</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Fixed window — what you implemented</h3>
+    <pre><span class="kw">type</span> <span class="tp">userRateLimit</span> <span class="kw">struct</span> {
+    count <span class="kw">int</span>
+    time  <span class="kw">int64</span>  <span class="cm">// unix timestamp of window start</span>
+}
+
+<span class="cm">// On each request:</span>
+<span class="kw">if</span> time.<span class="fn">Now</span>().<span class="fn">Unix</span>()-userRate.time > <span class="num">10</span> {
+    <span class="cm">// window expired — reset</span>
+    rl.cache_map[ip] = <span class="tp">userRateLimit</span>{count: <span class="num">0</span>, time: time.<span class="fn">Now</span>().<span class="fn">Unix</span>()}
+}
+userRate = rl.cache_map[ip]        <span class="cm">// re-read AFTER potential reset</span>
+<span class="kw">if</span> userRate.count >= rl.limit { <span class="cm">/* block */</span> }
+rl.cache_map[ip] = <span class="tp">userRateLimit</span>{
+    count: rl.cache_map[ip].count + <span class="num">1</span>,
+    time:  rl.cache_map[ip].time,   <span class="cm">// preserve window start time</span>
+}</pre>
+    <div class="callout warn">
+      <span class="callout-icon">⚠️</span>
+      <span>Known limitation: boundary burst. A user can send (limit-1) requests at t=9s, window resets at t=10s, then (limit) more — getting nearly 2× the intended limit across a 2-second window. Redis sliding window fixes this.</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ REDIS -->
+<div id="redis" class="section">
+  <div class="section-header">
+    <div class="eyebrow">// redis</div>
+    <h2>Redis client &amp; commands</h2>
+    <p>Connecting to Redis, connection pooling, and the commands you'll use.</p>
+  </div>
+
+  <div class="card">
+    <h3>Creating the client with connection pooling</h3>
+    <pre>rdb := redis.<span class="fn">NewClient</span>(&amp;redis.Options{
+    Addr:         <span class="st">"redis:6379"</span>,  <span class="cm">// docker service name, not localhost</span>
+    Password:     <span class="st">""</span>,            <span class="cm">// no password in dev</span>
+    DB:           <span class="num">0</span>,             <span class="cm">// default database</span>
+    PoolSize:     <span class="num">100</span>,           <span class="cm">// max concurrent TCP connections</span>
+    MinIdleConns: <span class="num">10</span>,            <span class="cm">// keep 10 warm — no cold-start latency</span>
+})</pre>
+    <div class="callout info">
+      <span class="callout-icon">🔗</span>
+      <span>Creating a new TCP connection per request costs ~1ms. A connection pool keeps N connections alive and reuses them. Your goroutine borrows one, uses it, returns it — same concept as your <code>http.Client</code> transport config in the weather service.</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Core commands — your rate limiter toolkit</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th>Redis command</th><th>What it does</th><th>Go call</th></tr>
+        <tr>
+          <td><code>GET key</code></td>
+          <td>Read a string value. Returns <code>nil</code> if missing.</td>
+          <td><code>rdb.Get(ctx, key).Result()</code></td>
+        </tr>
+        <tr>
+          <td><code>SET key val</code></td>
+          <td>Write a value. Optional TTL: <code>SET key val EX 60</code></td>
+          <td><code>rdb.Set(ctx, key, val, 60*time.Second).Err()</code></td>
+        </tr>
+        <tr>
+          <td><code>INCR key</code></td>
+          <td>Atomically increment integer by 1. Creates key at 1 if missing.</td>
+          <td><code>rdb.Incr(ctx, key).Result()</code></td>
+        </tr>
+        <tr>
+          <td><code>EXPIRE key secs</code></td>
+          <td>Set TTL. Key auto-deletes after N seconds.</td>
+          <td><code>rdb.Expire(ctx, key, 60*time.Second).Err()</code></td>
+        </tr>
+        <tr>
+          <td><code>TTL key</code></td>
+          <td>Seconds remaining until expiry. Use for <code>Retry-After</code> header.</td>
+          <td><code>rdb.TTL(ctx, key).Result()</code></td>
+        </tr>
+        <tr>
+          <td><code>DEL key</code></td>
+          <td>Delete key immediately.</td>
+          <td><code>rdb.Del(ctx, key).Err()</code></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Context timeouts — always use them</h3>
+    <pre><span class="cm">// In your middleware — derive from the request's context</span>
+ctx, cancel := context.<span class="fn">WithTimeout</span>(r.<span class="fn">Context</span>(), <span class="num">50</span>*time.Millisecond)
+<span class="kw">defer</span> <span class="fn">cancel</span>()
+
+result, err := rateLimitScript.<span class="fn">Run</span>(ctx, rrl.rdb, ...).Int()
+<span class="cm">// If Redis takes > 50ms: ctx is cancelled, err != nil, you fail open</span></pre>
+    <div class="callout warn">
+      <span class="callout-icon">⚠️</span>
+      <span>Use <code>r.Context()</code> as the parent, not <code>context.Background()</code>. If the client disconnects mid-request, <code>r.Context()</code> is cancelled automatically — no orphan Redis calls.</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Fail open vs fail closed</h3>
+    <pre><span class="kw">if</span> err != <span class="kw">nil</span> {
+    fmt.<span class="fn">Printf</span>(<span class="st">"Redis error: %v\n"</span>, err)
+
+    <span class="cm">// FAIL OPEN — let request through (availability &gt; strict correctness)</span>
+    next.<span class="fn">ServeHTTP</span>(w, r)  <span class="good">← your current choice — correct for most APIs</span>
+    <span class="kw">return</span>
+
+    <span class="cm">// FAIL CLOSED — block all requests when Redis is down</span>
+    <span class="cm">// http.Error(w, "Service Unavailable", 503)</span>
+    <span class="cm">// Use for: financial APIs, abuse-critical systems</span>
+}</pre>
+    <div class="callout success">
+      <span class="callout-icon">✓</span>
+      <span>Fail open is the right call for most APIs. An unavailable rate limiter should not take down your service. Users get through, and Redis being down is a monitoring problem, not a user problem.</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ LUA -->
+<div id="lua" class="section">
+  <div class="section-header">
+    <div class="eyebrow">// redis</div>
+    <h2>Lua scripts</h2>
+    <p>Atomic multi-command operations — the right way to do INCR + EXPIRE without a race.</p>
+  </div>
+
+  <div class="card">
+    <h3>Why Lua scripts exist — the race condition</h3>
+    <p>Redis is single-threaded, so any individual command is atomic. But when you need two commands together atomically, there's a race window between them:</p>
+    <div class="flow">
+      <div class="flow-box fb-blue">Goroutine A: INCR → 1</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box fb-red">Goroutine B: INCR → 1</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box fb-red">Both see count=1, neither sets EXPIRE</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box fb-red">Key lives forever!</div>
+    </div>
+    <p>A Lua script runs entirely inside Redis's engine as a single unit. No other command can interleave while it executes.</p>
+  </div>
+
+  <div class="card">
+    <h3>Your Lua script — annotated</h3>
+    <pre><span class="kw">var</span> rateLimitLuaScript = redis.<span class="fn">NewScript</span>(`
+<span class="cm">-- KEYS[1] = "rate:127.0.0.1"  (the Redis key for this IP)</span>
+<span class="cm">-- ARGV[1] = 5                  (the limit)</span>
+<span class="cm">-- ARGV[2] = 60                 (window in seconds)</span>
+
+<span class="lu">local</span> current = redis.<span class="fn">call</span>(<span class="st">"GET"</span>, KEYS[<span class="num">1</span>])
+
+<span class="cm">-- if key exists AND count >= limit: block</span>
+<span class="lu">if</span> current <span class="lu">and</span> tonumber(current) >= tonumber(ARGV[<span class="num">1</span>]) <span class="lu">then</span>
+    <span class="lu">return</span> <span class="num">0</span>    <span class="cm">-- blocked</span>
+
+<span class="lu">else</span>
+    current = redis.<span class="fn">call</span>(<span class="st">"INCR"</span>, KEYS[<span class="num">1</span>])  <span class="cm">-- atomic increment</span>
+
+    <span class="lu">if</span> tonumber(current) == <span class="num">1</span> <span class="lu">then</span>
+        <span class="cm">-- first request in this window — set the expiry</span>
+        redis.<span class="fn">call</span>(<span class="st">"EXPIRE"</span>, KEYS[<span class="num">1</span>], ARGV[<span class="num">2</span>])
+    <span class="lu">end</span>
+
+    <span class="lu">return</span> <span class="num">1</span>    <span class="cm">-- allowed</span>
+<span class="lu">end</span>
+`)</pre>
+  </div>
+
+  <div class="card">
+    <h3>KEYS vs ARGV — the critical distinction</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th></th><th>KEYS[]</th><th>ARGV[]</th></tr>
+        <tr>
+          <td>Contains</td>
+          <td>Redis key names</td>
+          <td>Extra data (limits, values, config)</td>
+        </tr>
+        <tr>
+          <td>Why separated</td>
+          <td>Redis uses KEYS for cluster routing — tells it which shard holds the data</td>
+          <td>Pure data, not used for routing</td>
+        </tr>
+        <tr>
+          <td>Index</td>
+          <td>1-based: <code>KEYS[1]</code>, <code>KEYS[2]</code></td>
+          <td>1-based: <code>ARGV[1]</code>, <code>ARGV[2]</code></td>
+        </tr>
+        <tr>
+          <td>Your script</td>
+          <td><code>KEYS[1]</code> = <code>"rate:127.0.0.1"</code></td>
+          <td><code>ARGV[1]</code> = <code>5</code>, <code>ARGV[2]</code> = <code>60</code></td>
+        </tr>
+      </table>
+    </div>
+    <div class="callout danger">
+      <span class="callout-icon">🚨</span>
+      <span>Lua arrays are <strong>1-indexed</strong>, not 0-indexed like Go slices. <code>KEYS[1]</code> is the first key, not <code>KEYS[0]</code>. This trips everyone up the first time.</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Calling it from Go</h3>
+    <pre><span class="cm">// .Run() signature: ctx, client, KEYS slice, then ARGV variadic args</span>
+allowed, err := rateLimitScript.<span class="fn">Run</span>(
+    ctx,
+    rrl.rdb,
+    []<span class="kw">string</span>{key},  <span class="cm">// KEYS — must be a []string</span>
+    limit,          <span class="cm">// ARGV[1]</span>
+    window,         <span class="cm">// ARGV[2]</span>
+).<span class="fn">Int</span>()           <span class="cm">// convert redis.Cmd result to int</span>
+
+<span class="kw">if</span> allowed == <span class="num">0</span> {
+    w.Header().<span class="fn">Set</span>(<span class="st">"Retry-After"</span>, <span class="st">"60"</span>)
+    http.<span class="fn">Error</span>(w, <span class="st">"Too Many Requests"</span>, http.StatusTooManyRequests)
+    <span class="kw">return</span>
+}</pre>
+    <div class="callout success">
+      <span class="callout-icon">⚡</span>
+      <span><code>redis.NewScript()</code> uses <code>EVALSHA</code> under the hood. The first call sends the full script; Redis stores it by its SHA hash. All subsequent calls send only the hash — much less data over the wire.</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ TIERS -->
+<div id="tiers" class="section">
+  <div class="section-header">
+    <div class="eyebrow">// architecture</div>
+    <h2>Two-tier design</h2>
+    <p>Why you need both local memory and Redis, and how Kubernetes breaks purely local state.</p>
+  </div>
+
+  <div class="card">
+    <h3>The fundamental trade-off</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th></th><th>Tier 1 — Local memory</th><th>Tier 2 — Redis</th></tr>
+        <tr>
+          <td>Speed</td>
+          <td><span class="badge badge-green">Nanoseconds</span> — no network hop</td>
+          <td><span class="badge badge-amber">~1ms</span> — network round trip</td>
+        </tr>
+        <tr>
+          <td>Correctness</td>
+          <td><span class="badge badge-red">Wrong</span> in multi-pod systems — each pod has its own counter</td>
+          <td><span class="badge badge-green">Correct</span> — single source of truth across all pods</td>
+        </tr>
+        <tr>
+          <td>Role</td>
+          <td>Local bouncer — blocks obvious abuse instantly</td>
+          <td>Global ledger — enforces real limits</td>
+        </tr>
+        <tr>
+          <td>Threshold</td>
+          <td>5× your real limit — catches bots only</td>
+          <td>Actual limit (e.g. 100 req/min)</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>The Kubernetes consistency problem</h3>
+    <p>3 pods, purely local state, limit = 100 req/min. Load balancer distributes traffic evenly:</p>
+    <div class="flow">
+      <div class="flow-box fb-blue">Pod A: sees 34 req ✓</div>
+      <div class="flow-arrow">+</div>
+      <div class="flow-box fb-blue">Pod B: sees 33 req ✓</div>
+      <div class="flow-arrow">+</div>
+      <div class="flow-box fb-blue">Pod C: sees 33 req ✓</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box fb-red">Actual total: 100 req — limit broken</div>
+    </div>
+    <p>Each pod thinks it's under limit. Your limit of 100 becomes effectively 300 with 3 pods. Redis solves this because all pods share one counter.</p>
+    <div class="callout info">
+      <span class="callout-icon">💡</span>
+      <span>Tier 1 does NOT try to enforce the real limit. It only stops clearly abusive traffic — e.g. 500 req/min on a single pod (clearly a bot). Normal users always reach Redis for the authoritative count.</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Request flow through both tiers</h3>
+    <pre><span class="kw">func</span> (rl *<span class="tp">TwoTierLimiter</span>) <span class="fn">isAllowed</span>(ctx context.Context, ip <span class="kw">string</span>) <span class="kw">bool</span> {
+
+    <span class="cm">// Tier 1: local check — no network, nanoseconds</span>
+    <span class="cm">// threshold = 5x real limit — only blocks bots</span>
+    <span class="kw">if</span> !rl.localCache.<span class="fn">Allow</span>(ip, <span class="num">500</span>) {
+        <span class="kw">return</span> <span class="kw">false</span>  <span class="cm">// clearly abusive — reject locally, Redis never touched</span>
+    }
+
+    <span class="cm">// Tier 2: Redis check — global truth across all pods</span>
+    <span class="kw">return</span> rl.redis.<span class="fn">Allow</span>(ctx, ip, <span class="num">100</span>)  <span class="cm">// real limit</span>
+}</pre>
+  </div>
+
+  <div class="card">
+    <h3>Fixed window boundary burst — know what you have</h3>
+    <p>Your window is anchored to the first request's timestamp, not to a rolling clock. This allows bursting at the boundary:</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-line"></div>
+        <div class="step-body">
+          <h4>t = 8s — user sends 4 requests</h4>
+          <p>Count = 4, under limit of 5. Window was started at t=0.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-line"></div>
+        <div class="step-body">
+          <h4>t = 9s — user sends 1 more request</h4>
+          <p>Count = 5, limit reached. User is blocked.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-line"></div>
+        <div class="step-body">
+          <h4>t = 10s — window resets (diff &gt; 10s)</h4>
+          <p>New window starts. Count = 0. User can send 5 more.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-line"></div>
+        <div class="step-body">
+          <h4>t = 10s — user sends 5 more requests</h4>
+          <p>Count = 5. All allowed. But: 10 requests happened between t=8 and t=11 — a 3-second window. Your 10-second limit was effectively 10 req in 3 seconds.</p>
+        </div>
+      </div>
+    </div>
+    <div class="callout purple">
+      <span class="callout-icon">📖</span>
+      <span>A Redis sliding window (using sorted sets with ZADD + ZCOUNT) fixes this by always counting the last 10 seconds from <em>right now</em>, not from when the window started. That's the next step after this project.</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Docker Compose — the one concept that trips you up</h3>
+    <pre><span class="cm"># docker-compose.yml</span>
+services:
+  <span class="fn">app</span>:
+    build: .
+    ports: [<span class="st">"8080:8080"</span>]
+    environment:
+      REDIS_ADDR: <span class="st">redis:6379</span>   <span class="cm"># ← service name, not localhost!</span>
+    depends_on: [redis]
+
+  <span class="fn">redis</span>:
+    image: redis:7-alpine
+    ports: [<span class="st">"6379:6379"</span>]</pre>
+    <div class="callout warn">
+      <span class="callout-icon">⚠️</span>
+      <span>Inside Docker Compose, your Go app connects to Redis via the service name (<code>redis</code>), not <code>localhost</code>. Each container is its own network namespace — <code>localhost</code> inside the app container refers to the app itself, not Redis.</span>
+    </div>
+  </div>
+</div>
+
+</main>
+</div>
+
+<script>
+function show(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => {
+    if (n.getAttribute('onclick') && n.getAttribute('onclick').includes("'" + id + "'")) {
+      n.classList.add('active');
+    }
+  });
+}
+document.querySelectorAll('.grid-card').forEach(card => {
+  card.addEventListener('click', function() {
+    const onclick = this.getAttribute('onclick');
+    if (onclick) eval(onclick);
+  });
+});
+</script>
+</body>
+</html>
