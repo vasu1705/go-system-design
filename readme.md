@@ -53,7 +53,7 @@ Each folder represents an independent project and contains its own README descri
 ### Foundation
 
 * [ ] 001 Weather API Gateway
-* [ ] 002 Rate Limiter
+* [ ] * [ ] 002 Rate Limiter [![Live Sandbox](https://img.shields.io/badge/Live-Interactive_Sandbox-7c3aed?style=flat-square)](https://vasu1705.github.io/go-system-design/002-rate-limiter/concept-guide.html)
 * [ ] 003 Worker Pool
 * [ ] 004 Concurrent File Processor
 * [ ] 005 Chat Server
